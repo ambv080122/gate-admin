@@ -103,11 +103,11 @@ async function loadUsers() {
           '<option value="30d"' + (u.plan === "30d" ? " selected" : "") + ">30d</option>" +
           '<option value="lifetime"' + (u.plan === "lifetime" ? " selected" : "") + ">Lifetime</option>" +
         "</select>" +
-        '<button data-op="activate" data-hwid="' + u.hwid + '">Activate</button>' +
+        '<button data-id="' + u.id + '" data-op="activate" data-hwid="' + u.hwid + '">Activate</button>' +
         (u.status === "banned"
-          ? '<button data-op="unban" data-hwid="' + u.hwid + '">Unban</button>'
-          : '<button data-op="ban" data-hwid="' + u.hwid + '">Ban</button>') +
-        '<button class="danger" data-op="delete" data-hwid="' + u.hwid + '">Delete</button>' +
+          ? '<button data-id="' + u.id + '" data-op="unban" data-hwid="' + u.hwid + '">Unban</button>'
+          : '<button data-id="' + u.id + '" data-op="ban" data-hwid="' + u.hwid + '">Ban</button>') +
+        '<button class="danger" data-id="' + u.id + '" data-op="delete" data-hwid="' + u.hwid + '">Delete</button>' +
       "</td>";
     tbody.appendChild(tr);
   }
@@ -164,7 +164,8 @@ document.getElementById("tbody").addEventListener("click", async (e) => {
   const op = btn.dataset.op;
   const hwid = btn.dataset.hwid;
   if (op === "delete" && !confirm("Delete?")) return;
-  const planEl = document.querySelector('.planSel[data-id="' + btn.dataset.id + '"]');
+  const row = btn.closest("tr");
+  const planEl = row ? row.querySelector(".planSel") : null;
   const plan = planEl ? planEl.value : "7d";
   const r = await rpc("gate_admin_apply", { admin_pass: state.pass, op, hwid, plan });
   if (r.ok) { setMsg(r.msg, true); loadUsers(); }
