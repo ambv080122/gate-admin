@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate Admin</title>
+<style>
+body{background:#12101a;color:#e6e6f0;font-family:Segoe UI,Arial;padding:24px;max-width:1100px;margin:0 auto}
+h2{color:#7DF9FF}
+table{border-collapse:collapse;width:100%;margin-top:12px}
+th,td{border:1px solid #33304a;padding:6px 8px;font-size:13px;text-align:left;vertical-align:middle}
+th{background:#221d38}
+input,select,button{padding:5px 8px;margin:2px;font-size:13px;background:#1d1830;color:#e6e6f0;border:1px solid #443a66;border-radius:4px}
+button{background:#8F00FF;color:#fff;border:0;cursor:pointer}
+button:hover{background:#a020f0}
+button.danger{background:#8a1a1a}.button.danger:hover{background:#b02020}
+.ok{color:#7DF9FF}.err{color:#ff5a5a}.mono{font-family:Consolas,monospace;font-size:12px}
+.hidden{display:none}
+.msg{padding:8px;margin:8px 0;border-radius:4px}
+sub{color:#8a85a0;font-size:12px}
+</style>
+</head>
+<body>
+<h2>Gate Admin <sub>(Supabase + GitHub Pages)</sub></h2>
+
+<div id="loginBox">
+  <p class="msg ok">Mag-login gamit ang ADMIN_PASS na nasa setup.sql (gate_admin_pass).</p>
+  <form id="loginForm">
+    <input type="password" id="pw" placeholder="Admin password" autocomplete="current-password">
+    <button type="submit">Login</button>
+    <button type="button" id="logoutBtn" class="hidden">Logout</button>
+  </form>
+  <p id="authMsg" class="err"></p>
+</div>
+
+<div id="panel" class="hidden">
+  <p class="msg ok" id="msg"></p>
+  <button id="refreshBtn">Refresh</button>
+  <button id="logoutBtn2">Logout</button>
+  <table>
+    <tr>
+      <th>ID</th><th>HWID</th><th>User</th><th>Status</th><th>Plan</th>
+      <th>Expires (UTC)</th><th>Last Login</th><th>Actions</th>
+    </tr>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+// ============ CONFIGURE ============
+const SUPA_URL = "https://dvzlmcswaympvxfwqhnk.supabase.co";
+const SUPA_KEY = "sb_publishable_-1lpjrpkYSiBJOCtx0d_Mg_M7RixUrD";
+// ====================================
+
+const state = { pass: sessionStorage.getItem("gpass") || "" };
+
+async function rpc(name, args) {
+  const res = await fetch(SUPA_URL + "/rest/v1/rpc/" + name, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPA_KEY,
+      "Authorization": "Bearer " + SUPA_KEY
+    },
+    body: JSON.stringify(args)
+  });
+  return res.json();
+}
+
+function fmtTs(ts) {
+  if (!ts) return "-";
+  const d = new Date(ts * 1000);
+  return d.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+async function loadUsers() {
+  const r = await rpc("gate_admin_list", { admin_pass: state.pass });
+  if (!r.ok) { document.getElementById("msg").textContent = r.msg || "Failed"; return; }
+  const rows = r.users || [];
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = "";
+  for (const u of rows) {
+    const tr = document.createElement("tr");
+    const expTxt = u.plan === "lifetime" ? "Lifetime" : fmtTs(u.expires_at);
+    tr.innerHTML =
+      "<td>" + u.id + "</td>" +
+      '<td class="mono">' + escapeHtml(u.hwid) + "</td>" +
+      "<td>" + escapeHtml(u.username) + "</td>" +
+      "<td>" + escapeHtml(u.status) + "</td>" +
+      "<td>" + escapeHtml(u.plan) + "</td>" +
+      '<td class="mono">' + expTxt + "</td>" +
+      '<td class="mono">' + fmtTs(u.last_login) + "</td>" +
+      "<td>" +
+        '<select data-id="' + u.id + '" class="planSel">' +
+          '<option value="7d"' + (u.plan === "7d" ? " selected" : "") + ">7d</option>" +
+          '<option value="15d"' + (u.plan === "15d" ? " selected" : "") + ">15d</option>" +
+          '<option value="30d"' + (u.plan === "30d" ? " selected" : "") + ">30d</option>" +
+          '<option value="lifetime"' + (u.plan === "lifetime" ? " selected" : "") + ">Lifetime</option>" +
+        "</select>" +
+        '<button data-op="activate" data-hwid="' + u.hwid + '">Activate</button>' +
+        (u.status === "banned"
+          ? '<button data-op="unban" data-hwid="' + u.hwid + '">Unban</button>'
+          : '<button data-op="ban" data-hwid="' + u.hwid + '">Ban</button>') +
+        '<button class="danger" data-op="delete" data-hwid="' + u.hwid + '">Delete</button>' +
+      "</td>";
+    tbody.appendChild(tr);
+  }
+}
+
+async function setMsg(text, ok) {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = ok ? "msg ok" : "msg err";
+}
+
+function showLogin() {
+  document.getElementById("loginBox").classList.remove("hidden");
+  document.getElementById("panel").classList.add("hidden");
+  document.getElementById("logoutBtn").classList.add("hidden");
+  document.getElementById("logoutBtn2").classList.add("hidden");
+}
+
+function showPanel() {
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("panel").classList.remove("hidden");
+  document.getElementById("logoutBtn").classList.remove("hidden");
+  document.getElementById("logoutBtn2").classList.remove("hidden");
+  document.getElementById("msg").textContent = "";
+  loadUsers();
+}
+
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  state.pass = document.getElementById("pw").value;
+  const r = await rpc("gate_admin_list", { admin_pass: state.pass });
+  document.getElementById("authMsg").textContent = "";
+  if (r.ok) {
+    sessionStorage.setItem("gpass", state.pass);
+    showPanel();
+  } else {
+    sessionStorage.removeItem("gpass");
+    document.getElementById("authMsg").textContent = r.msg || "Wrong password";
+  }
+});
+
+document.getElementById("logoutBtn").addEventListener("click", () => {
+  state.pass = ""; sessionStorage.removeItem("gpass"); showLogin();
+});
+document.getElementById("logoutBtn2").addEventListener("click", () => {
+  state.pass = ""; sessionStorage.removeItem("gpass"); showLogin();
+});
+
+document.getElementById("refreshBtn").addEventListener("click", loadUsers);
+
+document.getElementById("tbody").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  const op = btn.dataset.op;
+  const hwid = btn.dataset.hwid;
+  if (op === "delete" && !confirm("Delete?")) return;
+  const planEl = document.querySelector('.planSel[data-id="' + btn.dataset.id + '"]');
+  const plan = planEl ? planEl.value : "7d";
+  const r = await rpc("gate_admin_apply", { admin_pass: state.pass, op, hwid, plan });
+  if (r.ok) { setMsg(r.msg, true); loadUsers(); }
+  else setMsg(r.msg || "Action failed", false);
+});
+
+if (state.pass) {
+  rpc("gate_admin_list", { admin_pass: state.pass }).then(r => {
+    if (r.ok) showPanel(); else showLogin();
+  });
+} else {
+  showLogin();
+}
+</script>
+</body>
+</html>
