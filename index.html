@@ -107,6 +107,7 @@ async function loadUsers() {
         (u.status === "banned"
           ? '<button data-id="' + u.id + '" data-op="unban" data-hwid="' + u.hwid + '">Unban</button>'
           : '<button data-id="' + u.id + '" data-op="ban" data-hwid="' + u.hwid + '">Ban</button>') +
+        '<button data-id="' + u.id + '" data-op="edit" data-hwid="' + u.hwid + '" data-username="' + escapeHtml(u.username) + '">Edit</button>' +
         '<button class="danger" data-id="' + u.id + '" data-op="delete" data-hwid="' + u.hwid + '">Delete</button>' +
       "</td>";
     tbody.appendChild(tr);
@@ -164,6 +165,14 @@ document.getElementById("tbody").addEventListener("click", async (e) => {
   const op = btn.dataset.op;
   const hwid = btn.dataset.hwid;
   if (op === "delete" && !confirm("Delete?")) return;
+  if (op === "edit") {
+    const newUsername = prompt("New username:", btn.dataset.username || "");
+    if (newUsername === null || newUsername.trim() === "") return;
+    const r = await rpc("gate_admin_apply", { admin_pass: state.pass, op: "edit_username", hwid, username: newUsername.trim() });
+    if (r.ok) { setMsg(r.msg, true); loadUsers(); }
+    else setMsg(r.msg || "Action failed", false);
+    return;
+  }
   const row = btn.closest("tr");
   const planEl = row ? row.querySelector(".planSel") : null;
   const plan = planEl ? planEl.value : "7d";
